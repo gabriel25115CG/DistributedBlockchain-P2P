@@ -18,7 +18,8 @@ def print_menu():
 3. Consulter le solde d'une adresse
 4. Créer une transaction
 5. Miner un bloc
-6. Quitter
+6. Voir mon portefeuille
+7. Quitter
 """)
 
 def cli_loop(blockchain, network, wallet):
@@ -59,14 +60,23 @@ def cli_loop(blockchain, network, wallet):
             print("Transaction ajoutée (en attente)")
 
         elif choice == '5':
-            miner_address = input("Adresse du mineur: ").strip()
+            # Propose par défaut l'adresse du noeud (wallet)
+            miner_address = input(f"Adresse du mineur [{wallet.get_address()}]: ").strip()
+            if miner_address == '':
+                miner_address = wallet.get_address()
             block = blockchain.mine(miner_address)
             if block:
-                print(f"Bloc miné avec succès : index {block['index']}")
+                print(f"Bloc miné avec succès : index {block.index}")
             else:
                 print("Aucune transaction à miner")
 
         elif choice == '6':
+            # Affiche le solde du portefeuille local (wallet)
+            address = wallet.get_address()
+            balance = wallet.get_balance(blockchain, address)
+            print(f"Votre portefeuille ({address}) contient : {balance} UTBM")
+
+        elif choice == '7':
             print("Au revoir !")
             break
 
@@ -85,10 +95,15 @@ def main():
     network = P2PNode(port)
     wallet = Wallet()
 
+    # Affiche clairement l'adresse du noeud au démarrage
+    print("\n=== Adresse unique de ce noeud (wallet) ===")
+    print(wallet.get_address())
+    print("==========================================\n")
+
     # Démarre le P2P network (écoute des connexions)
     network.start()
 
-    # Liste des peers connus - adapte cette liste selon ta configuration réseau
+    # Liste des peers connus - adapte cette liste selon ta config réseau
     known_peers = [5001, 5002, 5003]
 
     # Connexion aux autres peers connus (sauf soi-même)

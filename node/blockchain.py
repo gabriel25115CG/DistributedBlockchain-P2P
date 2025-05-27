@@ -46,19 +46,27 @@ class Blockchain:
         self.unconfirmed_transactions.append(transaction)
 
     def mine(self, miner_address):
-        if not self.unconfirmed_transactions:
-            return False
-
-        # Ajouter la récompense de minage
+        # Crée la transaction de récompense (coinbase)
         reward_tx = Transaction("Network", miner_address, MINING_REWARD)
-        transactions = self.unconfirmed_transactions + [reward_tx.to_dict()]
-        
-        new_block = Block(index=self.last_block.index + 1,
-                          previous_hash=self.last_block.hash,
-                          timestamp=time.time(),
-                          transactions=transactions)
+
+        # Si aucune transaction en attente, on mine un bloc avec juste la récompense
+        if not self.unconfirmed_transactions:
+            transactions = [reward_tx.to_dict()]
+        else:
+            # Sinon on ajoute les transactions + la récompense
+            transactions = list(self.unconfirmed_transactions) + [reward_tx.to_dict()]
+
+        new_block = Block(
+            index=self.last_block.index + 1,
+            previous_hash=self.last_block.hash,
+            timestamp=time.time(),
+            transactions=transactions
+        )
 
         proof = self.proof_of_work(new_block)
-        self.add_block(new_block, proof)
-        self.unconfirmed_transactions = []
-        return new_block
+        if self.add_block(new_block, proof):
+            # Vide la liste des transactions en attente seulement si bloc ajouté
+            self.unconfirmed_transactions = []
+            return new_block
+        else:
+            return None
