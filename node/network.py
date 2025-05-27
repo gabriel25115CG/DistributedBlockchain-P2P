@@ -13,6 +13,12 @@ class P2PNode:
         self.server.listen(5)
         self.running = True
         self.lock = threading.Lock()
+        self.transaction_callback = None
+        self.block_callback = None
+        self.blockchain = None  # ✅ ligne ajoutée
+
+    def set_blockchain(self, blockchain):  # ✅ méthode ajoutée
+        self.blockchain = blockchain
 
     def start(self):
         threading.Thread(target=self.listen_for_peers, daemon=True).start()
@@ -28,7 +34,7 @@ class P2PNode:
 
     def handle_peer(self, conn):
         try:
-            data = conn.recv(4096)
+            data = conn.recv(65536)
             if not data:
                 return
             message = json.loads(data.decode())
@@ -39,13 +45,9 @@ class P2PNode:
                 if peer_port and peer_port != self.port:
                     with self.lock:
                         self.peers.add(peer_port)
-
-                    # Prépare et envoie la liste des peers connus
                     with self.lock:
                         peers_list = list(self.peers)
                     conn.send(json.dumps({'type': 'PEERS', 'peers': peers_list}).encode())
-
-                    # Tente de se connecter à tous les autres peers pour propager la connaissance
                     for p in peers_list:
                         if p != self.port and p != peer_port:
                             self.connect_to_peer(p)
@@ -54,6 +56,24 @@ class P2PNode:
                 with self.lock:
                     peers_list = list(self.peers)
                 conn.send(json.dumps({'type': 'PEERS', 'peers': peers_list}).encode())
+
+            elif msg_type == 'NEW_TRANSACTION':
+                tx = message.get('transaction')
+                if tx and self.transaction_callback:
+                    self.transaction_callback(tx)
+                conn.send(json.dumps({'type': 'ACK', 'message': 'Transaction reçue'}).encode())
+
+            elif msg_type == 'NEW_BLOCK':
+                block_data = message.get('block')
+                if block_data and self.block_callback:
+                    self.block_callback(block_data)
+                conn.send(json.dumps({'type': 'ACK', 'message': 'Bloc reçu'}).encode())
+
+            elif msg_type == 'GET_CHAIN':
+                chain_data = []
+                if self.blockchain:  # ✅ correction ici
+                    chain_data = [block.to_dict() for block in self.blockchain.chain]
+                conn.send(json.dumps({'type': 'CHAIN', 'chain': chain_data}).encode())
 
             else:
                 conn.send(json.dumps({'error': 'Type de message inconnu'}).encode())
@@ -65,7 +85,7 @@ class P2PNode:
 
     def connect_to_peer(self, peer_port):
         if peer_port == self.port:
-            return  # Ne pas se connecter à soi-même
+            return
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(PEER_TIMEOUT)
@@ -76,7 +96,6 @@ class P2PNode:
             response = json.loads(data.decode())
             if response.get('type') == 'PEERS':
                 with self.lock:
-                    # Filtrer les ports invalides ou soi-même
                     filtered_peers = [p for p in response['peers'] if p != self.port]
                     self.peers.update(filtered_peers)
             s.close()
@@ -86,6 +105,55 @@ class P2PNode:
     def get_peers(self):
         with self.lock:
             return list(self.peers)
+
+    def send_transaction(self, peer_port, transaction):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(PEER_TIMEOUT)
+            s.connect(('127.0.0.1', peer_port))
+            message = json.dumps({'type': 'NEW_TRANSACTION', 'transaction': transaction})
+            s.send(message.encode())
+            s.recv(4096)
+            s.close()
+        except Exception as e:
+            print(f"Erreur en envoyant la transaction au peer {peer_port}: {e}")
+
+    def send_block(self, peer_port, block):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(PEER_TIMEOUT)
+            s.connect(('127.0.0.1', peer_port))
+            message = json.dumps({'type': 'NEW_BLOCK', 'block': block.to_dict()})
+            s.send(message.encode())
+            s.recv(4096)
+            s.close()
+        except Exception as e:
+            print(f"Erreur en envoyant le bloc au peer {peer_port}: {e}")
+
+    def request_chain(self, peer_port):
+        """
+        Demande la chaîne complète à un peer.
+        """
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(PEER_TIMEOUT)
+            s.connect(('127.0.0.1', peer_port))
+            message = json.dumps({'type': 'GET_CHAIN'})
+            s.send(message.encode())
+            data = s.recv(65536)
+            response = json.loads(data.decode())
+            s.close()
+            if response.get('type') == 'CHAIN':
+                return response.get('chain')
+        except Exception as e:
+            print(f"Erreur en récupérant la chaîne depuis le peer {peer_port}: {e}")
+        return None
+
+    def set_transaction_callback(self, callback):
+        self.transaction_callback = callback
+
+    def set_block_callback(self, callback):
+        self.block_callback = callback
 
     def stop(self):
         self.running = False

@@ -31,7 +31,7 @@ def cli_loop(blockchain, network, wallet):
             chain = blockchain.chain
             print(f"Chaîne (hauteur {len(chain)}):")
             for block in chain:
-                print(f" - Bloc {block['index']}, nonce={block['nonce']}, txs={len(block['transactions'])}")
+                print(f" - Bloc {block.index}, nonce={block.nonce}, txs={len(block.transactions)}")
 
         elif choice == '2':
             peers = network.get_peers()
@@ -56,32 +56,79 @@ def cli_loop(blockchain, network, wallet):
                 "recipient": recipient,
                 "amount": amount
             }
-            blockchain.add_new_transaction(tx)
-            print("Transaction ajoutée (en attente)")
+            if blockchain.add_new_transaction(tx):
+                peers = network.get_peers()
+                for peer in peers:
+                    try:
+                        network.send_transaction(peer, tx)
+                    except Exception as e:
+                        print(f"Erreur en envoyant la transaction au peer {peer}: {e}")
+
+                print("Transaction ajoutée (en attente) et propagée aux peers")
+            else:
+                print("Transaction refusée (solde insuffisant)")
 
         elif choice == '5':
-            # Propose par défaut l'adresse du noeud (wallet)
             miner_address = input(f"Adresse du mineur [{wallet.get_address()}]: ").strip()
             if miner_address == '':
                 miner_address = wallet.get_address()
             block = blockchain.mine(miner_address)
             if block:
                 print(f"Bloc miné avec succès : index {block.index}")
+                peers = network.get_peers()
+                for peer in peers:
+                    try:
+                        network.send_block(peer, block)
+                    except Exception as e:
+                        print(f"Erreur en envoyant le bloc au peer {peer}: {e}")
             else:
                 print("Aucune transaction à miner")
 
         elif choice == '6':
-            # Affiche le solde du portefeuille local (wallet)
             address = wallet.get_address()
             balance = wallet.get_balance(blockchain, address)
             print(f"Votre portefeuille ({address}) contient : {balance} UTBM")
 
         elif choice == '7':
             print("Au revoir !")
+            network.stop()
             break
 
         else:
             print("Choix invalide")
+
+def synchronize_chain(blockchain, network):
+    from node.block import Block
+
+    peers = network.get_peers()
+    for peer in peers:
+        try:
+            chain_data = network.request_chain(peer)
+            if chain_data:
+                if len(chain_data) > len(blockchain.chain):
+                    new_chain = [Block.from_dict(b) for b in chain_data]
+                    if validate_chain(new_chain):
+                        blockchain.chain = new_chain
+                        blockchain.unconfirmed_transactions = []
+                        print(f"Synchronisation : chaîne mise à jour depuis le peer {peer}")
+                        return True
+        except Exception as e:
+            print(f"Erreur lors de la synchronisation avec le peer {peer}: {e}")
+    print("Synchronisation impossible ou chaîne locale à jour")
+    return False
+
+def validate_chain(chain):
+    from node.blockchain import DIFFICULTY
+    for i in range(1, len(chain)):
+        current = chain[i]
+        previous = chain[i - 1]
+        if current.previous_hash != previous.hash:
+            print(f"Chaîne invalide à l'index {i} : previous_hash incorrect")
+            return False
+        if not current.hash.startswith('0' * DIFFICULTY) or current.hash != current.compute_hash():
+            print(f"Chaîne invalide à l'index {i} : preuve de travail invalide")
+            return False
+    return True
 
 def main():
     if len(sys.argv) < 2:
@@ -90,44 +137,52 @@ def main():
 
     port = int(sys.argv[1])
 
-    # Instancie blockchain, network et wallet
     blockchain = Blockchain()
     network = P2PNode(port)
     wallet = Wallet()
 
-    # Affiche clairement l'adresse du noeud au démarrage
+    def on_receive_transaction(tx):
+        if tx not in blockchain.unconfirmed_transactions:
+            blockchain.add_new_transaction(tx)
+            print(f"\nNouvelle transaction reçue via le réseau: {tx}\n")
+
+    def on_receive_block(block_data):
+        success = blockchain.add_block_from_network(block_data)
+        if success:
+            print(f"\nNouveau bloc ajouté via le réseau : index {block_data['index']}\n")
+        else:
+            print(f"\nBloc rejeté du réseau : index {block_data['index']}\n")
+
+    network.set_transaction_callback(on_receive_transaction)
+    network.set_block_callback(on_receive_block)
+
     print("\n=== Adresse unique de ce noeud (wallet) ===")
     print(wallet.get_address())
     print("==========================================\n")
 
-    # Démarre le P2P network (écoute des connexions)
     network.start()
 
-    # Liste des peers connus - adapte cette liste selon ta config réseau
+    # Connexion aux peers
     known_peers = [5001, 5002, 5003]
-
-    # Connexion aux autres peers connus (sauf soi-même)
     for peer_port in known_peers:
         if peer_port != port:
             try:
                 network.connect_to_peer(peer_port)
-                time.sleep(0.1)  # Petit délai pour éviter surcharge réseau au démarrage
+                time.sleep(0.1)
             except Exception as e:
                 print(f"Erreur en se connectant au peer {peer_port}: {e}")
 
-    # Injecte dans l'API Flask
-    setup_api(blockchain, network, wallet)
+    # Synchroniser la blockchain
+    synchronize_chain(blockchain, network)
 
-    # Lance Flask dans un thread daemon
+    # Lancer l'API
+    setup_api(blockchain, network, wallet)
     flask_thread = threading.Thread(target=run_flask, args=(port,), daemon=True)
     flask_thread.start()
 
     print(f"Node démarré sur le port {port} (API sur {port + 1000})")
-
-    # Attend quelques secondes pour que le réseau démarre bien
     time.sleep(1)
 
-    # Lance la boucle CLI dans le thread principal
     cli_loop(blockchain, network, wallet)
 
 if __name__ == "__main__":
