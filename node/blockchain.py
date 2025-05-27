@@ -2,6 +2,7 @@ import time
 from node.block import Block
 from node.transaction import Transaction
 from config import DIFFICULTY, MINING_REWARD
+from colorama import Fore, Style  # <-- import colorama ici
 
 class Blockchain:
 
@@ -29,8 +30,11 @@ class Blockchain:
         block.nonce = 0
         computed_hash = block.compute_hash()
         while not computed_hash.startswith('0' * DIFFICULTY):
+            if block.nonce % 1000 == 0:  # Affiche une ligne toutes les 1000 tentatives
+                print(Fore.CYAN + f"⛏️ Tentative nonce={block.nonce} => hash={computed_hash}" + Style.RESET_ALL)
             block.nonce += 1
             computed_hash = block.compute_hash()
+        print(Fore.GREEN + f"\n✅ Bloc validé avec nonce={block.nonce} => hash={computed_hash}\n" + Style.RESET_ALL)
         return computed_hash
 
     def add_block(self, block, proof):
