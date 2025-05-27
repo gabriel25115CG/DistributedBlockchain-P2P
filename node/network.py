@@ -8,6 +8,7 @@ class P2PNode:
         self.port = port
         self.peers = set()
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server.bind(('127.0.0.1', port))
         self.server.listen(5)
         self.running = True
@@ -18,41 +19,69 @@ class P2PNode:
 
     def listen_for_peers(self):
         while self.running:
-            conn, addr = self.server.accept()
-            threading.Thread(target=self.handle_peer, args=(conn,), daemon=True).start()
+            try:
+                conn, addr = self.server.accept()
+                threading.Thread(target=self.handle_peer, args=(conn,), daemon=True).start()
+            except Exception as e:
+                if self.running:
+                    print(f"Erreur lors de l'acceptation d'une connexion : {e}")
 
     def handle_peer(self, conn):
         try:
             data = conn.recv(4096)
+            if not data:
+                return
             message = json.loads(data.decode())
-            if message['type'] == 'NEW_PEER':
-                peer_port = message['port']
+            msg_type = message.get('type')
+
+            if msg_type == 'NEW_PEER':
+                peer_port = message.get('port')
+                if peer_port and peer_port != self.port:
+                    with self.lock:
+                        self.peers.add(peer_port)
+
+                    # Prépare et envoie la liste des peers connus
+                    with self.lock:
+                        peers_list = list(self.peers)
+                    conn.send(json.dumps({'type': 'PEERS', 'peers': peers_list}).encode())
+
+                    # Tente de se connecter à tous les autres peers pour propager la connaissance
+                    for p in peers_list:
+                        if p != self.port and p != peer_port:
+                            self.connect_to_peer(p)
+
+            elif msg_type == 'GET_PEERS':
                 with self.lock:
-                    self.peers.add(peer_port)
-                conn.send(json.dumps({'type': 'PEERS', 'peers': list(self.peers)}).encode())
-            elif message['type'] == 'GET_PEERS':
-                with self.lock:
-                    conn.send(json.dumps({'type': 'PEERS', 'peers': list(self.peers)}).encode())
+                    peers_list = list(self.peers)
+                conn.send(json.dumps({'type': 'PEERS', 'peers': peers_list}).encode())
+
+            else:
+                conn.send(json.dumps({'error': 'Type de message inconnu'}).encode())
+
         except Exception as e:
             print(f"Erreur gestion peer: {e}")
         finally:
             conn.close()
 
-    def connect_to_peer(self, port):
+    def connect_to_peer(self, peer_port):
+        if peer_port == self.port:
+            return  # Ne pas se connecter à soi-même
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(PEER_TIMEOUT)
-            s.connect(('127.0.0.1', port))
+            s.connect(('127.0.0.1', peer_port))
             message = json.dumps({'type': 'NEW_PEER', 'port': self.port})
             s.send(message.encode())
             data = s.recv(4096)
             response = json.loads(data.decode())
-            if response['type'] == 'PEERS':
+            if response.get('type') == 'PEERS':
                 with self.lock:
-                    self.peers.update(response['peers'])
+                    # Filtrer les ports invalides ou soi-même
+                    filtered_peers = [p for p in response['peers'] if p != self.port]
+                    self.peers.update(filtered_peers)
             s.close()
         except Exception as e:
-            print(f"Erreur connexion peer {port}: {e}")
+            print(f"Erreur connexion peer {peer_port}: {e}")
 
     def get_peers(self):
         with self.lock:
@@ -60,4 +89,7 @@ class P2PNode:
 
     def stop(self):
         self.running = False
-        self.server.close()
+        try:
+            self.server.close()
+        except Exception:
+            pass
