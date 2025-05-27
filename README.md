@@ -165,7 +165,7 @@ Lors du démarrage, le nœud tente de synchroniser sa blockchain avec les peers 
 
 
 
-# English version 🇬🇧
+# English version 
 
 ---
 
