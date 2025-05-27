@@ -162,3 +162,171 @@ Lors du démarrage, le nœud tente de synchroniser sa blockchain avec les peers 
 - Gestion simplifiée des erreurs réseau
 - Optimisation de la propagation des transactions et blocs
 - Sécurité cryptographique à renforcer (gestion des clés privées)
+
+
+
+# English version 🇬🇧
+
+---
+
+## 1. Introduction
+
+**UTBM Blockchain Node** is a simple prototype implementation of a blockchain, allowing multiple nodes to connect in a peer-to-peer network, manage transactions, mine blocks, and synchronize the chain.
+
+Each node has:
+- A local blockchain
+- A unique wallet
+- A REST API (via Flask) to interact with the blockchain
+- A CLI (command line interface) to manually manage the blockchain
+
+---
+
+## 2. Main Features
+
+- Management of a blockchain with Proof of Work
+- Creation and validation of transactions
+- Block mining
+- P2P network to synchronize the blockchain and propagate transactions/blocks
+- Wallet with unique address and balance inquiry
+- REST API for remote access
+- Intuitive CLI for real-time interaction
+
+---
+
+## 3. Project Structure
+
+```
+project/
+├── node/
+│   ├── __init__.py
+│   ├── blockchain.py      # Blockchain class and validation logic
+│   ├── block.py           # Block class (single block)
+│   ├── wallet.py          # Wallet and key management
+│   ├── network.py         # P2P network (connection, exchanges)
+│   ├── api.py             # Flask API for HTTP interaction
+│   └── node.py            # Main entry point, CLI + network and API startup
+├── requirements.txt       # Python dependencies
+└── README.md              # This documentation
+```
+
+---
+
+## 4. Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/gabriel25115CG/DistributedBlockchain-P2P.git
+   cd DistributedBlockchain-P2P.git
+   ```
+
+2. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+   **Key dependencies:**
+   - Flask (API)
+   - Colorama (terminal colors)
+   - Other standard Python 3.7+ dependencies
+
+---
+
+## 5. Usage
+
+### Starting a node
+
+```bash
+python -m node.node <port>
+```
+
+Example:
+```bash
+python -m node.node 5001
+```
+
+- The node starts a Flask API on `<port + 1000>` (e.g., 6001)
+- The CLI activates to manage the local blockchain
+
+---
+
+### CLI Options
+
+| Choice | Action                               |
+|--------|------------------------------------|
+| 1      | Display the blockchain              |
+| 2      | View connected peers                |
+| 3      | Check the balance of an address     |
+| 4      | Create a transaction                |
+| 5      | Mine a block                       |
+| 6      | View your wallet                   |
+| 7      | Quit the node                      |
+
+---
+
+### Example of creating a transaction
+
+- Choose `4` in the CLI menu
+- Enter the sender address
+- Enter the recipient address
+- Enter the amount to transfer
+
+---
+
+### Mining
+
+- Choose `5` in the CLI menu
+- Provide the miner address (default is your wallet)
+- The node mines a block with pending transactions
+
+---
+
+## 6. Synchronization
+
+On startup, the node tries to synchronize its blockchain with known peers (default ports 5001, 5002, 5003).
+
+---
+
+## 7. Technical Architecture
+
+### Blockchain
+
+- List of blocks, each block contains:
+  - Index
+  - Timestamp
+  - List of transactions
+  - Nonce (proof of work)
+  - Previous block hash
+  - Current block hash
+
+- Chain validation: check hash continuity and difficulty (e.g., number of leading zeros)
+
+### P2P Network
+
+- Connect to peers via sockets
+- Propagate transactions and blocks
+- Callbacks for receiving network data
+
+### Flask API
+
+- Exposes endpoints to view the blockchain, create transactions, mine, etc.
+- Listens on `port + 1000`
+
+---
+
+## 8. Development and Contribution
+
+- Fork the repository
+- Create a branch for your changes
+- Test thoroughly (especially synchronization functions)
+- Submit a detailed pull request
+
+---
+
+## 9. Limitations and Possible Improvements
+
+- No robust consensus mechanism yet (e.g., Proof of Stake)
+- No web graphical interface
+- Simplified network error handling
+- Optimization of transaction and block propagation
+- Cryptographic security to be strengthened (private key management)
+
