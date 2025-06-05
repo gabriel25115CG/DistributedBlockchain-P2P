@@ -149,6 +149,13 @@ def validate_chain(chain):
             return False
     return True
 
+def periodic_sync(blockchain, network, interval=30):
+    while True:
+        time.sleep(interval)
+        synchronized = synchronize_chain(blockchain, network)
+        if synchronized:
+            print(Fore.GREEN + "Synchronisation périodique effectuée\n" + Style.RESET_ALL)
+
 def main():
     if len(sys.argv) < 2:
         print(Fore.RED + "Usage: python -m node.node <port>" + Style.RESET_ALL)
@@ -159,6 +166,7 @@ def main():
     blockchain = Blockchain()
     network = P2PNode(port)
     wallet = Wallet()
+    network.set_blockchain(blockchain)  
 
     def on_receive_transaction(tx):
         if tx not in blockchain.unconfirmed_transactions:
@@ -170,7 +178,8 @@ def main():
         if success:
             print(Fore.GREEN + f"\nNouveau bloc ajouté via le réseau : index {block_data['index']}\n" + Style.RESET_ALL)
         else:
-            print(Fore.RED + f"\nBloc rejeté du réseau : index {block_data['index']}\n" + Style.RESET_ALL)
+            print(Fore.RED + f"\nBloc rejeté du réseau : index {block_data['index']}, tentative de synchronisation...\n" + Style.RESET_ALL)
+            synchronize_chain(blockchain, network)
 
     network.set_transaction_callback(on_receive_transaction)
     network.set_block_callback(on_receive_block)
@@ -191,8 +200,11 @@ def main():
             except Exception as e:
                 print(Fore.RED + f"Erreur en se connectant au peer {peer_port}: {e}" + Style.RESET_ALL)
 
-    # Synchroniser la blockchain
+    # Synchroniser la blockchain au démarrage
     synchronize_chain(blockchain, network)
+
+    # Lancer la synchronisation périodique dans un thread
+    threading.Thread(target=periodic_sync, args=(blockchain, network), daemon=True).start()
 
     # Lancer l'API Flask
     setup_api(blockchain, network, wallet)

@@ -5,7 +5,6 @@ from node.transaction import Transaction
 
 app = Flask(__name__)
 
-# Ces variables seront assignées depuis node.py via la fonction setup_api
 blockchain = None
 network = None
 wallet = None
@@ -23,7 +22,7 @@ class NodeAPI:
         self.wallet = wallet
 
     def run(self, port):
-        # Lance Flask dans un thread séparé
+        
         self.port = port
         self.app_thread = threading.Thread(
             target=lambda: app.run(port=port, debug=False, use_reloader=False)

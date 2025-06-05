@@ -200,7 +200,7 @@ class Blockchain:
         network doit fournir une méthode pour récupérer la chaîne complète.
         """
         try:
-            chain_data = peer.request_chain()  # Cette méthode doit être définie dans l'objet peer
+            chain_data = peer.request_chain()  
             new_chain = [Block.from_dict(b) for b in chain_data]
             if self.replace_chain(new_chain):
                 return True

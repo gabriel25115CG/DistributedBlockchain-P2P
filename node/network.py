@@ -2,6 +2,7 @@ import socket
 import threading
 import json
 from config import PEER_TIMEOUT
+from colorama import Fore, Style
 
 class P2PNode:
     def __init__(self, port):
@@ -15,9 +16,9 @@ class P2PNode:
         self.lock = threading.Lock()
         self.transaction_callback = None
         self.block_callback = None
-        self.blockchain = None  # ✅ ligne ajoutée
+        self.blockchain = None  
 
-    def set_blockchain(self, blockchain):  # ✅ méthode ajoutée
+    def set_blockchain(self, blockchain):  
         self.blockchain = blockchain
 
     def start(self):
@@ -30,7 +31,7 @@ class P2PNode:
                 threading.Thread(target=self.handle_peer, args=(conn,), daemon=True).start()
             except Exception as e:
                 if self.running:
-                    print(f"Erreur lors de l'acceptation d'une connexion : {e}")
+                    print(Fore.RED + f"Erreur lors de l'acceptation d'une connexion : {e}" + Style.RESET_ALL)
 
     def handle_peer(self, conn):
         try:
@@ -70,16 +71,17 @@ class P2PNode:
                 conn.send(json.dumps({'type': 'ACK', 'message': 'Bloc reçu'}).encode())
 
             elif msg_type == 'GET_CHAIN':
-                chain_data = []
-                if self.blockchain:  # ✅ correction ici
+                if self.blockchain:
                     chain_data = [block.to_dict() for block in self.blockchain.chain]
-                conn.send(json.dumps({'type': 'CHAIN', 'chain': chain_data}).encode())
+                    conn.send(json.dumps(chain_data).encode())
+                else:
+                    conn.send(json.dumps([]).encode())
 
             else:
-                conn.send(json.dumps({'error': 'Type de message inconnu'}).encode())
+                conn.send(json.dumps({'type': 'ERROR', 'message': 'Type de message inconnu'}).encode())
 
         except Exception as e:
-            print(f"Erreur gestion peer: {e}")
+            print(Fore.RED + f"Erreur dans handle_peer: {e}" + Style.RESET_ALL)
         finally:
             conn.close()
 
@@ -100,7 +102,7 @@ class P2PNode:
                     self.peers.update(filtered_peers)
             s.close()
         except Exception as e:
-            print(f"Erreur connexion peer {peer_port}: {e}")
+            print(Fore.RED + f"Erreur connexion peer {peer_port}: {e}" + Style.RESET_ALL)
 
     def get_peers(self):
         with self.lock:
@@ -113,10 +115,10 @@ class P2PNode:
             s.connect(('127.0.0.1', peer_port))
             message = json.dumps({'type': 'NEW_TRANSACTION', 'transaction': transaction})
             s.send(message.encode())
-            s.recv(4096)
+            s.recv(1024)
             s.close()
         except Exception as e:
-            print(f"Erreur en envoyant la transaction au peer {peer_port}: {e}")
+            print(Fore.RED + f"Erreur en envoyant la transaction au peer {peer_port}: {e}" + Style.RESET_ALL)
 
     def send_block(self, peer_port, block):
         try:
@@ -125,39 +127,37 @@ class P2PNode:
             s.connect(('127.0.0.1', peer_port))
             message = json.dumps({'type': 'NEW_BLOCK', 'block': block.to_dict()})
             s.send(message.encode())
-            s.recv(4096)
+            s.recv(1024)
             s.close()
         except Exception as e:
-            print(f"Erreur en envoyant le bloc au peer {peer_port}: {e}")
+            print(Fore.RED + f"Erreur en envoyant le bloc au peer {peer_port}: {e}" + Style.RESET_ALL)
 
     def request_chain(self, peer_port):
-        """
-        Demande la chaîne complète à un peer.
-        """
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(PEER_TIMEOUT)
             s.connect(('127.0.0.1', peer_port))
             message = json.dumps({'type': 'GET_CHAIN'})
             s.send(message.encode())
-            data = s.recv(65536)
-            response = json.loads(data.decode())
+            data = b''
+            while True:
+                part = s.recv(4096)
+                if not part:
+                    break
+                data += part
             s.close()
-            if response.get('type') == 'CHAIN':
-                return response.get('chain')
+            chain_data = json.loads(data.decode())
+            return chain_data
         except Exception as e:
-            print(f"Erreur en récupérant la chaîne depuis le peer {peer_port}: {e}")
-        return None
+            print(Fore.RED + f"Erreur en récupérant la chaîne du peer {peer_port}: {e}" + Style.RESET_ALL)
+            return None
+
+    def stop(self):
+        self.running = False
+        self.server.close()
 
     def set_transaction_callback(self, callback):
         self.transaction_callback = callback
 
     def set_block_callback(self, callback):
         self.block_callback = callback
-
-    def stop(self):
-        self.running = False
-        try:
-            self.server.close()
-        except Exception:
-            pass
