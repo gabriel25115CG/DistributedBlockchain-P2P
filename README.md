@@ -66,7 +66,7 @@ project/
 
 ## 5. Utilisation
 
-### Lancer un nœud
+### Lancer 3 nœuds
 
 Example:
 ```bash
@@ -79,10 +79,7 @@ python -m node.node 5002
 python -m node.node 5003
 ```
 
-Exemple :
-```bash
-python -m node.node 5001
-```
+
 
 - Le nœud démarre une API Flask sur `<port + 1000>` (ex. 6001)
 - L’interface CLI s’active pour gérer la blockchain localement
@@ -240,11 +237,8 @@ project/
 
 ## 5. Usage
 
-### Starting a node
+### Starting 3 node
 
-```bash
-python -m node.node <port>
-```
 
 Example:
 ```bash
