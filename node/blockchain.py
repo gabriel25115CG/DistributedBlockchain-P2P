@@ -2,7 +2,7 @@ import time
 from node.block import Block
 from node.transaction import Transaction
 from config import DIFFICULTY, MINING_REWARD
-from colorama import Fore, Style  # <-- import colorama ici
+from colorama import Fore, Style 
 
 class Blockchain:
 
@@ -207,3 +207,29 @@ class Blockchain:
         except Exception as e:
             print(f"Erreur synchronisation chaîne avec peer {peer}: {e}")
         return False
+
+    def print_chain(self):
+        print(Fore.MAGENTA + f"\n=== Chaîne de blocs (hauteur {len(self.chain)}) ===\n" + Style.RESET_ALL)
+        for block in self.chain:
+            print(
+                Fore.YELLOW + f"[Bloc {block.index}] " + Style.RESET_ALL +
+                f"Nonce: {block.nonce} | " +
+                Fore.CYAN + f"Txs: {len(block.transactions)}" + Style.RESET_ALL
+            )
+            print(f"  {Fore.BLUE}Hash:         {Style.RESET_ALL}{block.hash}")
+            print(f"  {Fore.BLUE}Hash précédent:{Style.RESET_ALL} {block.previous_hash}")
+
+            if not block.transactions:
+                print(Fore.RED + "  Aucune transaction dans ce bloc." + Style.RESET_ALL)
+            else:
+                print(Fore.GREEN + "  Transactions :" + Style.RESET_ALL)
+                for i, tx in enumerate(block.transactions, start=1):
+                    sender = tx.get('sender', 'inconnu')
+                    recipient = tx.get('recipient', 'inconnu')
+                    amount = tx.get('amount', 'inconnu')
+                    print(
+                        f"    {i}. De {Fore.RED}{sender}{Style.RESET_ALL} "
+                        f"à {Fore.BLUE}{recipient}{Style.RESET_ALL} : "
+                        f"{Fore.YELLOW}{amount} UTBM{Style.RESET_ALL}"
+                    )
+            print()  

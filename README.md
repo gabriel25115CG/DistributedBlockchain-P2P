@@ -243,6 +243,12 @@ Example:
 ```bash
 python -m node.node 5001
 ```
+```bash
+python -m node.node 5002
+```
+```bash
+python -m node.node 5003
+```
 
 - The node starts a Flask API on `<port + 1000>` (e.g., 6001)
 - The CLI activates to manage the local blockchain

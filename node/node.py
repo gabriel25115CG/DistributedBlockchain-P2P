@@ -8,7 +8,6 @@ from node.network import P2PNode
 from node.wallet import Wallet
 from node.api import app, setup_api
 
-# Initialisation de colorama pour colorer le terminal (compatible Windows)
 init(autoreset=True)
 
 def run_flask(port):
@@ -24,33 +23,13 @@ def print_menu():
     print(Fore.CYAN + "6." + Style.RESET_ALL + " Voir mon portefeuille")
     print(Fore.CYAN + "7." + Style.RESET_ALL + " Quitter\n")
 
-def print_blockchain(blockchain):
-    chain = blockchain.chain
-    print(Fore.MAGENTA + f"\nChaîne (hauteur {len(chain)}):" + Style.RESET_ALL)
-    for block in chain:
-        print(Fore.YELLOW + f" - Bloc {block.index}, nonce={block.nonce}, txs={len(block.transactions)}" + Style.RESET_ALL)
-        if block.transactions:
-            print(Fore.CYAN + "   Transactions :" + Style.RESET_ALL)
-            for i, tx in enumerate(block.transactions, 1):
-                sender = tx['sender']
-                recipient = tx['recipient']
-                amount = tx['amount']
-                print(
-                    f"    {Fore.GREEN}{i}.{Style.RESET_ALL} "
-                    f"De {Fore.RED}{sender}{Style.RESET_ALL} à {Fore.BLUE}{recipient}{Style.RESET_ALL} : "
-                    f"{Fore.YELLOW}{amount} UTBM{Style.RESET_ALL}"
-                )
-        else:
-            print(Fore.RED + "   Pas de transactions." + Style.RESET_ALL)
-        print()  # Ligne vide entre les blocs
-
 def cli_loop(blockchain, network, wallet):
     while True:
         print_menu()
         choice = input(Fore.YELLOW + "Choix: " + Style.RESET_ALL).strip()
 
         if choice == '1':
-            print_blockchain(blockchain)
+            blockchain.print_chain()
 
         elif choice == '2':
             peers = network.get_peers()
@@ -70,20 +49,14 @@ def cli_loop(blockchain, network, wallet):
                 print(Fore.RED + "Montant invalide\n" + Style.RESET_ALL)
                 continue
 
-            tx = {
-                "sender": sender,
-                "recipient": recipient,
-                "amount": amount
-            }
+            tx = {"sender": sender, "recipient": recipient, "amount": amount}
             if blockchain.add_new_transaction(tx):
-                peers = network.get_peers()
-                for peer in peers:
+                for peer in network.get_peers():
                     try:
                         network.send_transaction(peer, tx)
                     except Exception as e:
                         print(Fore.RED + f"Erreur en envoyant la transaction au peer {peer}: {e}" + Style.RESET_ALL)
-
-                print(Fore.GREEN + "Transaction ajoutée (en attente) et propagée aux peers\n" + Style.RESET_ALL)
+                print(Fore.GREEN + "Transaction ajoutée et propagée\n" + Style.RESET_ALL)
             else:
                 print(Fore.RED + "Transaction refusée (solde insuffisant)\n" + Style.RESET_ALL)
 
@@ -91,11 +64,11 @@ def cli_loop(blockchain, network, wallet):
             miner_address = input(Fore.YELLOW + f"Adresse du mineur [{wallet.get_address()}]: " + Style.RESET_ALL).strip()
             if miner_address == '':
                 miner_address = wallet.get_address()
+
             block = blockchain.mine(miner_address)
             if block:
                 print(Fore.GREEN + f"Bloc miné avec succès : index {block.index}\n" + Style.RESET_ALL)
-                peers = network.get_peers()
-                for peer in peers:
+                for peer in network.get_peers():
                     try:
                         network.send_block(peer, block)
                     except Exception as e:
@@ -117,32 +90,32 @@ def cli_loop(blockchain, network, wallet):
             print(Fore.RED + "Choix invalide\n" + Style.RESET_ALL)
 
 def synchronize_chain(blockchain, network):
+    """Essaye de synchroniser la blockchain depuis les pairs."""
     from node.block import Block
 
-    peers = network.get_peers()
-    for peer in peers:
+    for peer in network.get_peers():
         try:
             chain_data = network.request_chain(peer)
-            if chain_data:
-                if len(chain_data) > len(blockchain.chain):
-                    new_chain = [Block.from_dict(b) for b in chain_data]
-                    if validate_chain(new_chain):
-                        blockchain.chain = new_chain
-                        blockchain.unconfirmed_transactions = []
-                        print(Fore.GREEN + f"Synchronisation : chaîne mise à jour depuis le peer {peer}\n" + Style.RESET_ALL)
-                        return True
+            if chain_data and len(chain_data) > len(blockchain.chain):
+                new_chain = [Block.from_dict(b) for b in chain_data]
+                if validate_chain(new_chain):
+                    blockchain.chain = new_chain
+                    blockchain.unconfirmed_transactions = []
+                    print(Fore.GREEN + f"Chaîne synchronisée depuis le peer {peer}\n" + Style.RESET_ALL)
+                    return True
         except Exception as e:
-            print(Fore.RED + f"Erreur lors de la synchronisation avec le peer {peer}: {e}" + Style.RESET_ALL)
-    print(Fore.YELLOW + "Synchronisation impossible ou chaîne locale à jour\n" + Style.RESET_ALL)
+            print(Fore.RED + f"Erreur de synchronisation avec le peer {peer}: {e}" + Style.RESET_ALL)
+
+    print(Fore.YELLOW + "Chaîne locale à jour ou synchronisation impossible\n" + Style.RESET_ALL)
     return False
 
 def validate_chain(chain):
+    """Valide l'intégrité d'une chaîne de blocs."""
     from node.blockchain import DIFFICULTY
     for i in range(1, len(chain)):
-        current = chain[i]
-        previous = chain[i - 1]
+        current, previous = chain[i], chain[i - 1]
         if current.previous_hash != previous.hash:
-            print(Fore.RED + f"Chaîne invalide à l'index {i} : previous_hash incorrect" + Style.RESET_ALL)
+            print(Fore.RED + f"Chaîne invalide à l'index {i} : mauvais previous_hash" + Style.RESET_ALL)
             return False
         if not current.hash.startswith('0' * DIFFICULTY) or current.hash != current.compute_hash():
             print(Fore.RED + f"Chaîne invalide à l'index {i} : preuve de travail invalide" + Style.RESET_ALL)
@@ -150,10 +123,10 @@ def validate_chain(chain):
     return True
 
 def periodic_sync(blockchain, network, interval=30):
+    """Synchronisation périodique avec les peers."""
     while True:
         time.sleep(interval)
-        synchronized = synchronize_chain(blockchain, network)
-        if synchronized:
+        if synchronize_chain(blockchain, network):
             print(Fore.GREEN + "Synchronisation périodique effectuée\n" + Style.RESET_ALL)
 
 def main():
@@ -166,53 +139,48 @@ def main():
     blockchain = Blockchain()
     network = P2PNode(port)
     wallet = Wallet()
-    network.set_blockchain(blockchain)  
+    network.set_blockchain(blockchain)
 
     def on_receive_transaction(tx):
         if tx not in blockchain.unconfirmed_transactions:
             blockchain.add_new_transaction(tx)
-            print(Fore.GREEN + f"\nNouvelle transaction reçue via le réseau: {tx}\n" + Style.RESET_ALL)
+            print(Fore.GREEN + f"\nTransaction reçue : {tx}\n" + Style.RESET_ALL)
 
     def on_receive_block(block_data):
         success = blockchain.add_block_from_network(block_data)
         if success:
-            print(Fore.GREEN + f"\nNouveau bloc ajouté via le réseau : index {block_data['index']}\n" + Style.RESET_ALL)
+            print(Fore.GREEN + f"\nBloc ajouté via réseau : index {block_data['index']}\n" + Style.RESET_ALL)
         else:
-            print(Fore.RED + f"\nBloc rejeté du réseau : index {block_data['index']}, tentative de synchronisation...\n" + Style.RESET_ALL)
+            print(Fore.RED + f"\nBloc rejeté : tentative de resynchro...\n" + Style.RESET_ALL)
             synchronize_chain(blockchain, network)
 
     network.set_transaction_callback(on_receive_transaction)
     network.set_block_callback(on_receive_block)
 
-    print(Fore.BLUE + "\n=== Adresse unique de ce noeud (wallet) ===" + Style.RESET_ALL)
+    print(Fore.BLUE + "\n=== Adresse de ce noeud ===" + Style.RESET_ALL)
     print(wallet.get_address())
-    print(Fore.BLUE + "==========================================\n" + Style.RESET_ALL)
+    print(Fore.BLUE + "===========================\n" + Style.RESET_ALL)
 
     network.start()
 
     # Connexion aux peers connus
-    known_peers = [5001, 5002, 5003]
-    for peer_port in known_peers:
+    for peer_port in [5001, 5002, 5003]:
         if peer_port != port:
             try:
                 network.connect_to_peer(peer_port)
                 time.sleep(0.1)
             except Exception as e:
-                print(Fore.RED + f"Erreur en se connectant au peer {peer_port}: {e}" + Style.RESET_ALL)
+                print(Fore.RED + f"Erreur de connexion au peer {peer_port}: {e}" + Style.RESET_ALL)
 
-    # Synchroniser la blockchain au démarrage
+    # Synchronisation initiale
     synchronize_chain(blockchain, network)
 
-    # Lancer la synchronisation périodique dans un thread
+    # Lancer les threads : sync périodique et API Flask
     threading.Thread(target=periodic_sync, args=(blockchain, network), daemon=True).start()
-
-    # Lancer l'API Flask
     setup_api(blockchain, network, wallet)
-    flask_thread = threading.Thread(target=run_flask, args=(port,), daemon=True)
-    flask_thread.start()
+    threading.Thread(target=run_flask, args=(port,), daemon=True).start()
 
-    print(Fore.GREEN + f"Node démarré sur le port {port} (API sur {port + 1000})\n" + Style.RESET_ALL)
-    time.sleep(1)
+    print(Fore.GREEN + f"Node lancé sur le port {port} (API sur {port + 1000})\n" + Style.RESET_ALL)
 
     cli_loop(blockchain, network, wallet)
 
