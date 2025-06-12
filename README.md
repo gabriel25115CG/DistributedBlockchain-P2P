@@ -68,8 +68,15 @@ project/
 
 ### Lancer un nœud
 
+Example:
 ```bash
-python -m node.node <port>
+python -m node.node 5001
+```
+```bash
+python -m node.node 5002
+```
+```bash
+python -m node.node 5003
 ```
 
 Exemple :
