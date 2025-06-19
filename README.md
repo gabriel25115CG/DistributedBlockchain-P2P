@@ -65,7 +65,7 @@ project/
 
 ## 5. Utilisation
 
-### Lancer 3 nœuds
+### Lancer 3 nœuds (Dans 3 terminaux différents)
 
 Example:
 ```bash
