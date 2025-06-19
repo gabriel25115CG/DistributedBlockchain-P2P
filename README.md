@@ -1,4 +1,4 @@
-# UTBM Blockchain Node - Gabriel - Clément - Cyril
+# UTBM Blockchain SR73 - Gabriel - Clément - Cyril
 
 ---
 
