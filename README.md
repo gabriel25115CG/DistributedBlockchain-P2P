@@ -1,4 +1,4 @@
-# UTBM Blockchain Node
+# UTBM Blockchain Node - Gabriel - Clément - Cyril
 
 ---
 
